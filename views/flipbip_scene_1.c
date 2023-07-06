@@ -44,6 +44,8 @@
 #define TEXT_DEFAULT_COIN "Coin"
 #define TEXT_RECEIVE_ADDRESS "receive address:"
 #define TEXT_DEFAULT_DERIV "m/44'/X'/0'/0"
+#define TEXT_DESCRIPTION1 "May take up"
+#define TEXT_DESCRIPTION2 "to 15 seconds"
 const char* TEXT_INFO = "-Scroll pages with up/down-"
                         "p1,2)   BIP39 Mnemonic/Seed"
                         "p3)       BIP32 Root Key   "
@@ -307,6 +309,8 @@ void flipbip_scene_1_draw(Canvas* canvas, FlipBipScene1Model* model) {
         canvas_set_font(canvas, FontPrimary);
         canvas_draw_str(canvas, 2, 10, TEXT_LOADING);
         canvas_draw_str(canvas, 7, 30, s_derivation_text);
+        canvas_draw_str(canvas, 7, 50, TEXT_DESCRIPTION1);
+        canvas_draw_str(canvas, 7, 60, TEXT_DESCRIPTION2);
         canvas_draw_icon(canvas, 86, 25, &I_Keychain_39x36);
     } else if(model->page >= PAGE_ADDR_BEGIN && model->page <= PAGE_ADDR_END) {
         // draw address header
