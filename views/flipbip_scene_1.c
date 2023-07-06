@@ -370,8 +370,7 @@ static int flipbip_scene_1_model_init(
     memzero(mnemonic, TEXT_BUFFER_SIZE);
 
     // Check if the mnemonic key & data is already saved in persistent storage, or overwrite is true
-    if(overwrite || (!flipbip_has_file(FlipBipFileKey, NULL, false) &&
-                     !flipbip_has_file(FlipBipFileDat, NULL, false))) {
+    if(overwrite || (!flipbip_has_file(FlipBipFileDat, NULL, false))) {
         // Set mnemonic only mode
         model->mnemonic_only = true;
         // Generate a random mnemonic using trezor-crypto
@@ -646,6 +645,8 @@ void flipbip_scene_1_enter(void* context) {
     //notification_message(app->notification, &sequence_blink_cyan_100);
     flipbip_led_set_rgb(app, 255, 0, 0);
 
+    FURI_LOG_D("BIP", "Entering scene 1");
+
     with_view_model(
         instance->view,
         FlipBipScene1Model * model,
@@ -657,7 +658,8 @@ void flipbip_scene_1_enter(void* context) {
 
             // nonzero status, free the mnemonic
             if(status != FlipBipStatusSuccess) {
-                memzero((void*)model->mnemonic, strlen(model->mnemonic));
+                // calling strlen on mnemonic here can cause a crash, don't.
+                // it wasn't loaded properly anyways, no need to zero the memory
                 free((void*)model->mnemonic);
             }
 
@@ -667,7 +669,8 @@ void flipbip_scene_1_enter(void* context) {
                 model->page = PAGE_MNEMONIC;
                 flipbip_play_long_bump(app);
             } else if(status == FlipBipStatusLoadError) {
-                model->mnemonic = "ERROR:,Load error";
+                model->mnemonic =
+                    "ERROR:,Load error. Are you trying to load an incompatible seed file?";
                 model->page = PAGE_MNEMONIC;
                 flipbip_play_long_bump(app);
             } else if(status == FlipBipStatusMnemonicCheckError) {

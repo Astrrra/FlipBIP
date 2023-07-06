@@ -1,8 +1,10 @@
 #include "flipbip_file.h"
 #include <storage/storage.h>
-#include <applications.h>
 #include <loader/loader.h>
 #include "../helpers/flipbip_string.h"
+#include <furi.h>
+#include <furi_hal.h>
+#include <flipper_format/flipper_format.h>
 // From: lib/crypto
 #include <memzero.h>
 #include <rand.h>
@@ -13,32 +15,23 @@
 #define FLIPBIP_DAT_FILE_NAME ".flipbip.dat"
 // #define FLIPBIP_DAT_FILE_NAME ".flipbip.dat.txt"
 #define FLIPBIP_DAT_FILE_NAME_BAK ".flipbip.dat.bak"
-#define FLIPBIP_KEY_FILE_NAME ".flipbip.key"
-// #define FLIPBIP_KEY_FILE_NAME ".flipbip.key.txt"
-#define FLIPBIP_KEY_FILE_NAME_BAK ".flipbip.key.bak"
 #define FLIPBIP_DAT_PATH FLIPBIP_APP_BASE_FOLDER_PATH(FLIPBIP_DAT_FILE_NAME)
 #define FLIPBIP_DAT_PATH_BAK FLIPBIP_APP_BASE_FOLDER_PATH(FLIPBIP_DAT_FILE_NAME_BAK)
-#define FLIPBIP_KEY_PATH FLIPBIP_APP_BASE_FOLDER_PATH(FLIPBIP_KEY_FILE_NAME)
-#define FLIPBIP_KEY_PATH_BAK FLIPBIP_APP_BASE_FOLDER_PATH(FLIPBIP_KEY_FILE_NAME_BAK)
 
 const char* TEXT_QRFILE = "Filetype: QRCode\n"
                           "Version: 0\n"
                           "Message: "; // 37 chars + 1 null
-#define FILE_HLEN 4
-#define FILE_KLEN 256
-#define FILE_SLEN 512
+#define SETTINGS_MAX_LEN 512
 #define FILE_MAX_PATH_LEN 48
 #define FILE_MAX_QRFILE_CONTENT 90
-const char* FILE_HSTR = "fb01";
-const char* FILE_K1 = "fb0131d5cf688221c109163908ebe51debb46227c6cc8b37641910833222772a"
-                      "baefe6d9ceb651842260e0d1e05e3b90d15e7d5ffaaabc0207bf200a117793a2";
+#define CRYPTO_KEY_SLOT 11
+
+#define TAG "CR"
 
 bool flipbip_load_file(char* settings, const FlipBipFile file_type, const char* file_name) {
     bool ret = false;
     const char* path;
-    if(file_type == FlipBipFileKey) {
-        path = FLIPBIP_KEY_PATH;
-    } else if(file_type == FlipBipFileDat) {
+    if(file_type == FlipBipFileDat) {
         path = FLIPBIP_DAT_PATH;
     } else {
         char path_buf[FILE_MAX_PATH_LEN] = {0};
@@ -91,9 +84,7 @@ bool flipbip_load_file(char* settings, const FlipBipFile file_type, const char* 
 bool flipbip_has_file(const FlipBipFile file_type, const char* file_name, const bool remove) {
     bool ret = false;
     const char* path;
-    if(file_type == FlipBipFileKey) {
-        path = FLIPBIP_KEY_PATH;
-    } else if(file_type == FlipBipFileDat) {
+    if(file_type == FlipBipFileDat) {
         path = FLIPBIP_DAT_PATH;
     } else {
         char path_buf[FILE_MAX_PATH_LEN] = {0};
@@ -122,10 +113,7 @@ bool flipbip_save_file(
     bool ret = false;
     const char* path;
     const char* path_bak;
-    if(file_type == FlipBipFileKey) {
-        path = FLIPBIP_KEY_PATH;
-        path_bak = FLIPBIP_KEY_PATH_BAK;
-    } else if(file_type == FlipBipFileDat) {
+    if(file_type == FlipBipFileDat) {
         path = FLIPBIP_DAT_PATH;
         path_bak = FLIPBIP_DAT_PATH_BAK;
     } else {
@@ -187,123 +175,191 @@ bool flipbip_save_qrfile(
 }
 
 bool flipbip_load_file_secure(char* settings) {
-    const size_t dlen = FILE_HLEN + FILE_SLEN + 1;
+    uint32_t dlen = SETTINGS_MAX_LEN;
 
-    // allocate memory for key/data
-    char* data = malloc(dlen);
+    uint8_t* data = malloc(dlen);
     memzero(data, dlen);
+    uint8_t iv[16];
 
-    // load k2 from file
-    if(!flipbip_load_file(data, FlipBipFileKey, NULL)) return false;
+    uint32_t version = 0;
 
-    // check header
-    if(data[0] != FILE_HSTR[0] || data[1] != FILE_HSTR[1] || data[2] != FILE_HSTR[2] ||
-       data[3] != FILE_HSTR[3]) {
+    FuriString* filetype;
+    filetype = furi_string_alloc();
+
+    // load IVs and encrypted data from file
+    Storage* storage = furi_record_open(RECORD_STORAGE);
+    FlipperFormat* flipper_format = flipper_format_file_alloc(storage);
+
+    bool success = false;
+
+    if(flipper_format_file_open_existing(flipper_format, FLIPBIP_DAT_PATH)) {
+        do {
+            if(!flipper_format_read_header(flipper_format, filetype, &version)) {
+                FURI_LOG_E(TAG, "Missing or incorrect header");
+                break;
+            }
+            if(strcmp(furi_string_get_cstr(filetype), "FlipBIP encrypted seed file version") !=
+                   0 ||
+               version != 1) {
+                FURI_LOG_E(TAG, "Type or version mismatch");
+                break;
+            }
+            if(!flipper_format_read_hex(flipper_format, "IV", iv, 16)) break;
+            if(!flipper_format_read_uint32(flipper_format, "Data length", &dlen, 1)) break;
+            if(!flipper_format_read_hex(flipper_format, "Data", data, dlen)) break;
+            FURI_LOG_D(TAG, "Data loaded");
+            success = true;
+        } while(0);
+    }
+
+    // close file
+    flipper_format_free(flipper_format);
+    furi_record_close(RECORD_STORAGE);
+    free(filetype);
+
+    if(!success) {
+        FURI_LOG_E(TAG, "Unable to load data");
         memzero(data, dlen);
         free(data);
         return false;
     }
-    // seek --> header
-    data += FILE_HLEN;
 
-    // prepare k1
-    uint8_t k1[64];
-    flipbip_xtob(FILE_K1, k1, strlen(FILE_K1) / 2);
-
-    // load k2 from file buffer (secured by k1)
-    flipbip_cipher(k1, strlen(FILE_K1) / 2, data, data, FILE_KLEN);
-    uint8_t k2[128];
-    flipbip_xtob(data, k2, FILE_KLEN / 2);
-    // zero k2 buffer
-    memzero(data, FILE_KLEN);
-    // seek <-- header
-    data -= FILE_HLEN;
-
-    // load data from file
-    if(!flipbip_load_file(data, FlipBipFileDat, NULL)) return false;
-
-    // check header
-    if(data[0] != FILE_HSTR[0] || data[1] != FILE_HSTR[1] || data[2] != FILE_HSTR[2] ||
-       data[3] != FILE_HSTR[3]) {
+    // prepare crypto
+    if(!furi_hal_crypto_store_load_key(CRYPTO_KEY_SLOT, iv)) {
+        FURI_LOG_E(TAG, "Unable to load encryption key");
         memzero(data, dlen);
         free(data);
-        memzero(k1, strlen(FILE_K1) / 2);
-        memzero(k2, FILE_KLEN / 2);
         return false;
     }
-    // seek --> header
-    data += FILE_HLEN;
 
-    // load settings from file buffer (secured by k2)
-    flipbip_cipher(k2, FILE_KLEN / 2, data, data, FILE_SLEN);
-    flipbip_xtob(data, (unsigned char*)data, FILE_SLEN / 2);
+    // prepare memory for decrypted data
+    uint8_t* settings_bin = malloc(dlen);
+    memzero(settings_bin, dlen);
 
-    // copy to output
-    strcpy(settings, data);
+    // decrypt data to output
+    if(!furi_hal_crypto_decrypt(data, settings_bin, dlen)) {
+        FURI_LOG_E(TAG, "Decryption failed");
+        memzero(data, dlen);
+        free(data);
+        memzero(settings_bin, dlen);
+        free(settings_bin);
+        furi_hal_crypto_store_unload_key(CRYPTO_KEY_SLOT);
+        return false;
+    } else {
+        FURI_LOG_D(TAG, "Decryption successful");
+    }
 
-    // seek <-- header
-    data -= FILE_HLEN;
+    // deinit crypto
+    furi_hal_crypto_store_unload_key(CRYPTO_KEY_SLOT);
+
+    // copy decrypted data to output
+    strcpy(settings, (char*)settings_bin);
 
     // clear memory
     memzero(data, dlen);
     free(data);
-    memzero(k1, strlen(FILE_K1) / 2);
-    memzero(k2, FILE_KLEN / 2);
+    memzero(settings_bin, dlen);
+    free(settings_bin);
 
     return true;
 }
 
 bool flipbip_save_file_secure(const char* settings) {
-    const size_t dlen = FILE_HLEN + FILE_SLEN + 1;
+    // cap settings to 256 chars
+    uint32_t len = strlen(settings);
+    if(len > (SETTINGS_MAX_LEN / 2)) {
+        len = SETTINGS_MAX_LEN / 2;
+        FURI_LOG_D(TAG, "Settings too long, truncating to %ld chars", len);
+    }
 
-    // cap settings to 256 bytes
-    size_t len = strlen(settings);
-    if(len > (FILE_SLEN / 2)) len = FILE_SLEN / 2;
+    // pad settings
+    uint8_t* padded_settings = malloc(SETTINGS_MAX_LEN);
+    memzero(padded_settings, SETTINGS_MAX_LEN);
+    strcpy((char*)padded_settings, settings);
+    len = SETTINGS_MAX_LEN;
 
-    // allocate memory for key/data
-    char* data = malloc(dlen);
-    memzero(data, dlen);
+    // allocate memory for data
+    uint8_t* data = malloc(len);
+    memzero(data, len);
 
-    // write header
-    strncpy(data, FILE_HSTR, FILE_HLEN);
-    // seek --> header
-    data += FILE_HLEN;
+    // check if the key exists, if not, create it
+    if(!furi_hal_crypto_verify_key(CRYPTO_KEY_SLOT)) return false;
 
-    // prepare k1
-    uint8_t k1[64];
-    flipbip_xtob(FILE_K1, k1, strlen(FILE_K1) / 2);
+    // prepare IVs
+    uint8_t iv[16];
+    furi_hal_random_fill_buf(iv, 16);
+    if(!furi_hal_crypto_store_load_key(CRYPTO_KEY_SLOT, iv)) {
+        FURI_LOG_E(TAG, "Unable to load encryption key");
+        memzero(data, len);
+        free(data);
+        memzero(padded_settings, len);
+        free(padded_settings);
+        memzero(iv, 16);
+        return false;
+    } else {
+        FURI_LOG_D(TAG, "Encryption key loaded");
+    }
 
-    // generate k2
-    uint8_t k2[128];
-    random_buffer(k2, FILE_KLEN / 2);
+    if(!furi_hal_crypto_encrypt(padded_settings, data, len)) {
+        FURI_LOG_E(TAG, "Encryption failed");
+        memzero(data, len);
+        free(data);
+        memzero(padded_settings, len);
+        free(padded_settings);
+        memzero(iv, 16);
+        return false;
+    } else {
+        FURI_LOG_D(TAG, "Encryption successful");
+    }
 
-    // write k2 to file buffer (secured by k1)
-    flipbip_btox(k2, FILE_KLEN / 2, data);
-    flipbip_cipher(k1, strlen(FILE_K1) / 2, data, data, FILE_KLEN);
+    // deinit crypto
+    furi_hal_crypto_store_unload_key(CRYPTO_KEY_SLOT);
 
-    // seek <-- header
-    data -= FILE_HLEN;
-    // save k2 to file
-    flipbip_save_file(data, FlipBipFileKey, NULL, false);
-    // seek --> header
-    data += FILE_HLEN;
-    // zero k2 memory
-    memzero(data, FILE_KLEN);
+    // free padded settings
+    memzero(padded_settings, len);
+    free(padded_settings);
 
-    // write settings to file buffer (secured by k2)
-    flipbip_btox((uint8_t*)settings, len, data);
-    flipbip_cipher(k2, FILE_KLEN / 2, data, data, FILE_SLEN);
-
-    // seek <-- header
-    data -= FILE_HLEN;
     // save data to file
-    flipbip_save_file(data, FlipBipFileDat, NULL, false);
+    Storage* storage = furi_record_open(RECORD_STORAGE);
+    FlipperFormat* flipper_format = flipper_format_file_alloc(storage);
+    bool success = false;
+
+    if(flipper_format_file_open_always(flipper_format, FLIPBIP_DAT_PATH)) {
+        do {
+            if(!flipper_format_write_header_cstr(
+                   flipper_format, "FlipBIP encrypted seed file version", 1))
+                break;
+            if(!flipper_format_write_hex(flipper_format, "IV", iv, 16)) break;
+            if(!flipper_format_write_uint32(flipper_format, "Data length", &len, 1)) break;
+            if(!flipper_format_write_hex(flipper_format, "Data", data, len)) break;
+            success = true;
+        } while(0);
+    }
+
+    FlipperFormat* flipper_format_bak = flipper_format_file_alloc(storage);
+
+    // save the backup file
+    if(flipper_format_file_open_always(flipper_format_bak, FLIPBIP_DAT_PATH_BAK)) {
+        do {
+            if(!flipper_format_write_header_cstr(
+                   flipper_format_bak, "FlipBIP encrypted seed file version", 1))
+                break;
+            if(!flipper_format_write_hex(flipper_format_bak, "IV", iv, 16)) break;
+            if(!flipper_format_write_uint32(flipper_format_bak, "Data length", &len, 1)) break;
+            if(!flipper_format_write_hex(flipper_format_bak, "Data", data, len)) break;
+            success = true;
+        } while(0);
+    }
+
+    // close file
+    flipper_format_free(flipper_format);
+    flipper_format_free(flipper_format_bak);
+    furi_record_close(RECORD_STORAGE);
 
     // clear memory
-    memzero(data, dlen);
+    memzero(data, len);
     free(data);
-    memzero(k1, strlen(FILE_K1) / 2);
-    memzero(k2, FILE_KLEN / 2);
+    memzero(iv, 16);
 
-    return true;
+    return success;
 }
