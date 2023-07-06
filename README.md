@@ -47,11 +47,13 @@ The application will be compiled and copied onto your device
   - Wallets are saved to SD card upon creation in `apps_data/flipbip`
       - NOTE: `apps_data` folder must already exist on SD card!
   - Saved wallets can be viewed between app runs
-  - Wallets are encrypted with a randomly generated key, and that key is also encrypted
-      - `.flipbip.dat` and `.flipbip.key` files are both required to be in `apps_data/flipbip`
-      - Backups of both these files `.flipbip.dat.bak` and `.flipbip.key.bak` are also maintained
-      - If you want to externally back up your wallet, I recommend copying all these files, and storing the `key` and `dat` files seperately
-  - NOTE: The wallets should be decently tough to crack off of a Flipper, however any Flipper with the app installed can load a wallet in the `apps_data/flipbip` directory if both the `key` and `dat` file are present. Therefore, it is HIGHLY RECOMMENDED to use the BIP39 passphrase functionality and store the passphrase in your brain or on paper separately from the Flipper!
+  - Wallets are encrypted with a randomly generated key, and that key is stored in the secure enclave of the STM32WB55 MCU (slot 11). The same key is also used for encrypting the U2F files in the official U2F app. Slots 0-10 contain pre-shared factory keys that are the same for all devices, other slots are empty by default and are filled with randomly generated keys when used. The keys are non-extractable (if you manage to extract them from the secure enclave - please email astra@flipperzero.one with the key from slot 8 as a sample), therefore they can't be backed up (which is the whole point of the secure enclave).
+      - `.flipbip.dat` file is specific to your Flipper Zero, it can't be opened on any other Flipper Zero or any other device in general.
+      - `.flipbip.dat.bak` is created as a backup and never accessed, you can store it somewhere safe in case your SD card fails.
+      - If you want to externally back up your wallet, it is recommended to store them separately from your Flipper Zero, as it has the encryption key to the files.
+      - If you lose your Flipper Zero, you lose the encryption key. Make sure to back up your seed phrase somewhere safe. You find it by opening any wallet (BTC/ETH/DOGE) on your device.
+      - Moving the SD card or wallet files from one Flipper Zero to the other will result in them not functioning due to the keys being different.
+  - NOTE: The wallets should be close to impossible to crack off of a Flipper, however anyone with access to your Flipper with the app installed can load a wallet in the `apps_data/flipbip` directory. Therefore, it is HIGHLY RECOMMENDED to use the BIP39 passphrase functionality and store the passphrase in your brain or on paper separately from the Flipper!
 - BIP39 passphrase support
   - Configured in settings, not persisted between runs for security
 - Import your own mnemonic
