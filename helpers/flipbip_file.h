@@ -2,7 +2,6 @@
 
 typedef enum {
     FlipBipFileDat,
-    FlipBipFileKey,
     FlipBipFileOther,
 } FlipBipFile;
 

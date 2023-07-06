@@ -86,10 +86,10 @@ FlipBip* flipbip_app_alloc() {
     app->gui = furi_record_open(RECORD_GUI);
     app->notification = furi_record_open(RECORD_NOTIFICATION);
 
-    //Turn backlight on, believe me this makes testing your app easier
+    // Turn backlight on, believe me this makes testing your app easier
     notification_message(app->notification, &sequence_display_backlight_on);
 
-    //Scene additions
+    // Scene additions
     app->view_dispatcher = view_dispatcher_alloc();
     view_dispatcher_enable_queue(app->view_dispatcher);
 
@@ -139,13 +139,13 @@ FlipBip* flipbip_app_alloc() {
         (void*)app,
         app->input_text,
         TEXT_BUFFER_SIZE,
-        //clear default text
+        // clear default text
         true);
     text_input_set_header_text(app->text_input, "Input");
     view_dispatcher_add_view(
         app->view_dispatcher, FlipBipViewIdTextInput, text_input_get_view(app->text_input));
 
-    //End Scene Additions
+    // End Scene Additions
 
     return app;
 }
@@ -160,6 +160,7 @@ void flipbip_app_free(FlipBip* app) {
 
     // View Dispatcher
     view_dispatcher_remove_view(app->view_dispatcher, FlipBipViewIdMenu);
+    view_dispatcher_remove_view(app->view_dispatcher, FlipBipViewIdStartscreen);
     view_dispatcher_remove_view(app->view_dispatcher, FlipBipViewIdScene1);
     view_dispatcher_remove_view(app->view_dispatcher, FlipBipViewIdSettings);
     view_dispatcher_remove_view(app->view_dispatcher, FlipBipViewIdTextInput);
@@ -167,6 +168,7 @@ void flipbip_app_free(FlipBip* app) {
 
     view_dispatcher_free(app->view_dispatcher);
     furi_record_close(RECORD_GUI);
+    furi_record_close(RECORD_NOTIFICATION);
 
     app->gui = NULL;
     app->notification = NULL;
@@ -180,23 +182,14 @@ int32_t flipbip_app(void* p) {
     UNUSED(p);
     FlipBip* app = flipbip_app_alloc();
 
-    // Disabled because causes exit on custom firmwares such as RM
-    /*if(!furi_hal_region_is_provisioned()) {
-        flipbip_app_free(app);
-        return 1;
-    }*/
-
     view_dispatcher_attach_to_gui(app->view_dispatcher, app->gui, ViewDispatcherTypeFullscreen);
 
     scene_manager_next_scene(
         app->scene_manager, FlipBipSceneStartscreen); //Start with start screen
     //scene_manager_next_scene(app->scene_manager, FlipBipSceneMenu); //if you want to directly start with Menu
 
-    furi_hal_power_suppress_charge_enter();
-
     view_dispatcher_run(app->view_dispatcher);
 
-    furi_hal_power_suppress_charge_exit();
     flipbip_app_free(app);
 
     return 0;
