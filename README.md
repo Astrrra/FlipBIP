@@ -1,31 +1,19 @@
-# FlipBIP - BIP32/39/44
+# FlipBIP - BIP32/39/44 Secure Enclave edition
 
-[![Build](https://github.com/xtruan/FlipBIP/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/xtruan/FlipBIP/actions/workflows/build.yml)
+[![Build](https://github.com/astrrra/FlipBIP/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/astrrra/FlipBIP/actions/workflows/build.yml)
 
 ## Crypto toolkit for Flipper Zero
-- Built against `0.79.1` Flipper Zero firmware release
 - Using Trezor crypto libs from `core/v2.5.3` release
-- Included in [RogueMaster Custom Firmware](https://github.com/RogueMaster/flipperzero-firmware-wPlugins)
-
-### DONATE IF YOU FIND THE APP USEFUL
-  - ETH (or ERC-20): `xtruan.eth` or `0xa9Ad79502cdaf4F6881f3C2ef260713e5B771CE2`
-  - BTC: `16RP5Ui5QrWrVh2rR7NKAPwE5A4uFjCfbs`
 
 ## Background
 
-The goal of this project is to see how much crypto functionality can be brought to the Flipper Zero.
+This is a fork of the FlipBIP application with support for the integrated secure enclave of the Flipper Zero.
 
 ## How to install on Flipper Zero
-- If you do not have one, download a Flipper Zero firmware to get the `fbt` build tool
+- Install `ufbt` if you haven't already. Usually you do it with `python3 -m pip install ufbt`
 - Plug your Flipper Zero in via USB
-- Copy the contents of this folder into the `applications_user` folder of your firmware
-- Modify the `site_scons/cc.scons` file in the Flipper Zero firmware to add the `"-Os"` flag
-
-Then run the command: 
- ```
-./fbt COMPACT=1 DEBUG=0 launch_app APPSRC=applications_user/FlipBIP
- ```
-The application will be compiled and copied onto your device
+- Clone this github repository and navigate into it in your terminal
+- Run `ufbt launch` to compile, upload, and run the app.
 
 ## Status
 
@@ -77,3 +65,7 @@ The application will be compiled and copied onto your device
 - Custom wallet security
   - User specified password
 - USB/Bluetooth wallet functionality
+
+## Donate to the original author:
+- ETH (or ERC-20): `xtruan.eth` or `0xa9Ad79502cdaf4F6881f3C2ef260713e5B771CE2`
+- BTC: `16RP5Ui5QrWrVh2rR7NKAPwE5A4uFjCfbs`
