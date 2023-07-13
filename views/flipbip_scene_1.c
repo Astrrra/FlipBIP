@@ -101,6 +101,10 @@ static CONFIDENTIAL char* s_disp_text5 = NULL;
 static CONFIDENTIAL char* s_disp_text6 = NULL;
 // Derivation path text
 static const char* s_derivation_text = TEXT_DEFAULT_DERIV;
+// Warning text
+static bool s_warn_insecure = false;
+#define WARN_INSECURE_TEXT_1 "Recommendation:"
+#define WARN_INSECURE_TEXT_2 "Set BIP39 Passphrase"
 //static bool s_busy = false;
 
 void flipbip_scene_1_set_callback(
@@ -632,6 +636,9 @@ void flipbip_scene_1_enter(void* context) {
     const char* passphrase_text = "";
     if(app->passphrase == FlipBipPassphraseOn && strlen(app->passphrase_text) > 0) {
         passphrase_text = app->passphrase_text;
+        s_warn_insecure = false;
+    } else {
+        s_warn_insecure = true;
     }
 
     // BIP44 Coin setting
